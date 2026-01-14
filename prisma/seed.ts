@@ -150,11 +150,69 @@ async function seedInvitations(teams: any[], users: any[]) {
   return newInvitations;
 }
 
+async function seedCourse() {
+  const course = await client.course.upsert({
+    where: { id: 'default-course-id' },
+    update: {},
+    create: {
+      id: 'default-course-id',
+      name: 'Introduction to Computer Science',
+      description: 'A comprehensive course covering fundamental CS concepts including algorithms, data structures, and programming principles.',
+      systemPrompt: `You are a helpful AI tutor for this course. Your primary goal is to help students understand course material.
+
+IMPORTANT RULES:
+1. Always base your answers on the provided course materials when available.
+2. If you cite information from course materials, reference the specific lecture and page number.
+3. If you cannot answer from course materials, you may provide general knowledge BUT you must clearly label it as "Outside Course Material".
+4. Never fabricate citations or make up page numbers.
+5. Be encouraging and supportive to students.
+6. If a student seems confused, break down concepts into smaller parts.`,
+    },
+  });
+  console.log('Seeded course:', course.name);
+  return course;
+}
+
+async function seedEnrollments(users: any[], course: any) {
+  const enrollments: any[] = [];
+  
+  for (const user of users) {
+    try {
+      // First user (admin) is an instructor, others are students
+      const role = user.email === ADMIN_EMAIL ? 'INSTRUCTOR' : 'STUDENT';
+      const enrollment = await client.enrollment.upsert({
+        where: {
+          courseId_userId: {
+            courseId: course.id,
+            userId: user.id,
+          },
+        },
+        update: {},
+        create: {
+          courseId: course.id,
+          userId: user.id,
+          role,
+        },
+      });
+      enrollments.push(enrollment);
+    } catch (ex) {
+      console.log('Error creating enrollment:', ex);
+    }
+  }
+  
+  console.log('Seeded enrollments:', enrollments.length);
+  return enrollments;
+}
+
 async function init() {
   const users = await seedUsers();
   const teams = await seedTeams();
   await seedTeamMembers(users, teams);
   await seedInvitations(teams, users);
+  
+  // Seed AI Course Tutor data
+  const course = await seedCourse();
+  await seedEnrollments(users, course);
 }
 
 init();

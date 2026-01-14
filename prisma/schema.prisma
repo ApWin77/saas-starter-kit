@@ -67,6 +67,8 @@ model User {
   accounts    Account[]
   sessions    Session[]
   invitations Invitation[]
+  enrollments Enrollment[]
+  chatThreads ChatThread[]
 }
 
 model Team {
@@ -217,4 +219,158 @@ model jackson_ttl {
 
   @@index([expiresAt], map: "_jackson_ttl_expires_at")
   @@ignore
+}
+
+// ==========================================
+// AI Course Tutor Models
+// ==========================================
+
+enum EnrollmentRole {
+  STUDENT
+  INSTRUCTOR
+}
+
+enum ContentFileStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum MessageSender {
+  USER
+  ASSISTANT
+}
+
+enum AnswerMode {
+  COURSE_GROUNDED
+  OUTSIDE_MATERIAL
+}
+
+model Course {
+  id           String   @id @default(uuid())
+  name         String
+  description  String?
+  systemPrompt String?  @db.Text
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @default(now())
+
+  contentFiles   ContentFile[]
+  chatThreads    ChatThread[]
+  enrollments    Enrollment[]
+  quizTemplates  QuizTemplate[]
+}
+
+model Enrollment {
+  id        String         @id @default(uuid())
+  courseId  String
+  userId    String
+  role      EnrollmentRole @default(STUDENT)
+  createdAt DateTime       @default(now())
+
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([courseId, userId])
+  @@index([userId])
+}
+
+model ContentFile {
+  id         String            @id @default(uuid())
+  courseId   String
+  filename   String
+  storageUrl String
+  fileType   String
+  status     ContentFileStatus @default(PENDING)
+  uploadedBy String
+  uploadedAt DateTime          @default(now())
+
+  course Course          @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  chunks DocumentChunk[]
+
+  @@index([courseId])
+}
+
+model DocumentChunk {
+  id            String   @id @default(uuid())
+  courseId      String
+  contentFileId String
+  chunkText     String   @db.Text
+  chunkIndex    Int
+  metadata      Json     // {source_title, page_number, section_heading}
+  createdAt     DateTime @default(now())
+
+  contentFile ContentFile @relation(fields: [contentFileId], references: [id], onDelete: Cascade)
+
+  @@index([courseId])
+  @@index([contentFileId])
+}
+
+model ChatThread {
+  id        String   @id @default(uuid())
+  courseId  String
+  userId    String
+  title     String?
+  createdAt DateTime @default(now())
+
+  course   Course        @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages ChatMessage[]
+
+  @@index([courseId])
+  @@index([userId])
+}
+
+model ChatMessage {
+  id                String        @id @default(uuid())
+  threadId          String
+  sender            MessageSender
+  text              String        @db.Text
+  answerMode        AnswerMode?
+  retrievedChunkIds Json?
+  createdAt         DateTime      @default(now())
+
+  thread ChatThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  @@index([threadId])
+}
+
+model QuizTemplate {
+  id         String   @id @default(uuid())
+  courseId   String
+  storageUrl String
+  active     Boolean  @default(false)
+  uploadedAt DateTime @default(now())
+
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@index([courseId])
+}
+
+model TokenUsage {
+  id          String   @id @default(uuid())
+  userId      String
+  courseId    String
+  tokensUsed  Int
+  date        DateTime @db.Date
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now())
+
+  @@unique([userId, courseId, date])
+  @@index([userId])
+  @@index([date])
+}
+
+model AnalyticsEvent {
+  id        String   @id @default(uuid())
+  courseId  String
+  userId    String?
+  eventType String
+  payload   Json?
+  timestamp DateTime @default(now())
+
+  @@index([courseId])
+  @@index([userId])
+  @@index([eventType])
+  @@index([timestamp])
 }
